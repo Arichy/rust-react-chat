@@ -55,6 +55,7 @@ export default function Login({ show, setAuth }: { show: boolean; setAuth: Funct
             name="username"
             placeholder="John Doe"
             className="w-full px-4 py-2 mt-2 border rounded-md focus:outline-none focus:ring-1 focus:ring-blue-600"
+            autoComplete="off"
           />
         </div>
         <div>
@@ -65,6 +66,7 @@ export default function Login({ show, setAuth }: { show: boolean; setAuth: Funct
             name="phone"
             placeholder="+1111..."
             className="w-full px-4 py-2 mt-2 border rounded-md focus:outline-none focus:ring-1 focus:ring-blue-600"
+            autoComplete="off"
           />
         </div>
         <div className="flex items-baseline justify-between">
@@ -114,6 +116,7 @@ export default function Login({ show, setAuth }: { show: boolean; setAuth: Funct
             name="phone"
             placeholder="+1111..."
             className="w-full px-4 py-2 mt-2 border rounded-md focus:outline-none focus:ring-1 focus:ring-blue-600"
+            autoComplete="off"
           />
         </div>
         <div className="flex items-baseline justify-between">

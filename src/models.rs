@@ -5,7 +5,9 @@ use serde::{Deserialize, Serialize};
 pub struct User {
     pub id: String,
     pub username: String,
-    pub phone: String,
+    #[serde(skip_serializing)]
+    pub password: String,
+    #[serde(skip_serializing)]
     pub created_at: String,
 }
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Queryable, Insertable)]
@@ -27,7 +29,8 @@ pub struct Room {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NewUser {
     pub username: String,
-    pub phone: String,
+    pub password: String,
+    pub sign_in: bool,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NewConversation {
@@ -35,6 +38,7 @@ pub struct NewConversation {
     pub room_id: String,
     pub message: String,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RoomResponse {
     pub room: Room,

@@ -15,17 +15,6 @@ export default function Home() {
   const [auth, setAuthUser] = useLocalStorage('user', false);
   const [isLoading, messages, setMessages, fetchConversations] = useConversations('');
 
-  useEffect(() => {
-    fetch('http://localhost:8080/hello')
-      .then(res => res.json())
-      .then(res => {
-        console.log(res);
-      })
-      .catch(err => {
-        console.log(err);
-      });
-  }, []);
-
   const handleTyping = mode => {
     if (mode === 'IN') {
       setIsTyping(true);

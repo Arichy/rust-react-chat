@@ -30,7 +30,7 @@ impl actix::Message for ListRooms {
     type Result = Vec<String>;
 }
 
-#[derive(Message)]
+#[derive(Debug, Message)]
 #[rtype(result = "()")]
 pub struct Join {
     pub id: usize,
@@ -134,6 +134,7 @@ impl Handler<ClientMessage> for ChatServer {
 impl Handler<Join> for ChatServer {
     type Result = ();
     fn handle(&mut self, msg: Join, _: &mut Self::Context) -> Self::Result {
+        println!("Join message: {:?}", msg);
         // exit other rooms
         let Join { name, id } = msg;
         let mut rooms = vec![];

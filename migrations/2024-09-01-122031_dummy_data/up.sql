@@ -1,9 +1,9 @@
 -- Your SQL goes here
-INSERT INTO users(id, username, phone, created_at) 
+INSERT INTO users(id, username, password, created_at) 
 VALUES
-("4fbd288c-d3b2-4f78-adcf-def976902d50","Ahmad Rosid","123","2022-11-23T07:56:30.214162+00:00"),
-("1e9a12c1-e98c-4a83-a55a-32cc548a169d","Ashley Young","345","2022-11-23T07:56:30.214162+00:00"),
-("1bc833808-05ed-455a-9d26-64fe1d96d62d","Charles Edward","678","2022-12-23T07:56:30.214162+00:00");
+("4fbd288c-d3b2-4f78-adcf-def976902d50","Ahmad Rosid 123","$2b$04$J/X1RJThhCZNYOA/DTz0qu0wnPhmyK3TvZAoObFR3JI6usaWjrEB6","2022-11-23T07:56:30.214162+00:00"),
+("1e9a12c1-e98c-4a83-a55a-32cc548a169d","Ashley Young 456","$2b$04$OF3G0qsVJcQUFrw43MLH0.95eG.BEpRtOrvZAyahrQ.M29FRQcLfW","2022-11-23T07:56:30.214162+00:00"),
+("1bc833808-05ed-455a-9d26-64fe1d96d62d","Charles Edward 789","$2b$04$E0sGxYnQMpL3BsnRrV6oyeswjI.3a.Lv.BprVpEOqMugZxD9W/s8O","2022-12-23T07:56:30.214162+00:00");
 INSERT INTO rooms(id, name, last_message, participant_ids, created_at)
 VALUES
 ("f061383b-0393-4ce8-9a85-f31d03762263", "Charles Edward", "Hi, how are you?", "1e9a12c1-e98c-4a83-a55a-32cc548a169d,1bc833808-05ed-455a-9d26-64fe1d96d62d", "2022-12-23T07:56:30.214162+00:00"),
