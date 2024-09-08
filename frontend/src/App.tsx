@@ -5,8 +5,13 @@ import ChatRoom, { loader as chatRoomLoader, action as chatRoomAction } from './
 import Auth, { action as authAction } from './routes/Auth/Auth';
 import { MantineProvider } from '@mantine/core';
 import '@mantine/core/styles.css';
-import Chat from './routes/Chat/Chat';
+import Chat, {
+  loader as ChatLoader,
+  action as ChatAction,
+  ErrorBoundary as ChatErrorBoundary,
+} from './routes/Chat/Chat';
 import ChatIndex from './routes/ChatIndex/ChatIndex';
+import { ModalsProvider } from '@mantine/modals';
 
 const router = createBrowserRouter([
   {
@@ -26,11 +31,15 @@ const router = createBrowserRouter([
             id: 'chat_index',
             path: '/',
             Component: ChatIndex,
+            action: chatRoomAction,
           },
           {
             id: 'chat',
             path: '/room/:id',
             Component: Chat,
+            ErrorBoundary: ChatErrorBoundary,
+            loader: ChatLoader,
+            action: ChatAction,
           },
         ],
       },
@@ -47,7 +56,9 @@ const router = createBrowserRouter([
 export default function App() {
   return (
     <MantineProvider>
-      <RouterProvider router={router} />
+      <ModalsProvider>
+        <RouterProvider router={router} />
+      </ModalsProvider>
     </MantineProvider>
   );
 }

@@ -121,27 +121,20 @@ pub async fn get_current_user(
     pool: web::Data<DbPool>,
     session: Session,
 ) -> Result<HttpResponse, Error> {
-    let user_id: Option<Uuid> = session.get("user_id").unwrap_or(None);
-    println!("{:?}", user_id);
-    match user_id {
-        None => Ok(HttpResponse::Unauthorized().json(json!({
-            "message": "Signin required."
-        }))),
-        Some(user_id) => {
-            let user = web::block(move || {
-                let mut conn = pool.get()?;
-                db::users::find_user_by_uid(&mut conn, user_id)
-            })
-            .await?
-            .map_err(actix_web::error::ErrorInternalServerError)?;
+    let user_id = session.get::<Uuid>("user_id").unwrap().unwrap();
 
-            if user.is_none() {
-                Ok(HttpResponse::NotFound().json(json!({
-                    "message": format!("User {} does not exist.", user_id),
-                })))
-            } else {
-                Ok(HttpResponse::Ok().json(user))
-            }
-        }
+    let user = web::block(move || {
+        let mut conn = pool.get()?;
+        db::users::find_user_by_uid(&mut conn, user_id)
+    })
+    .await?
+    .map_err(actix_web::error::ErrorInternalServerError)?;
+
+    if user.is_none() {
+        Ok(HttpResponse::NotFound().json(json!({
+            "message": format!("User {} does not exist.", user_id),
+        })))
+    } else {
+        Ok(HttpResponse::Ok().json(user))
     }
 }

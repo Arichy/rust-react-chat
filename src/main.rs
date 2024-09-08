@@ -3,22 +3,34 @@ use actix::*;
 use actix_cors::Cors;
 use actix_files::Files;
 use actix_session::{
-    config::PersistentSession, storage::CookieSessionStore, Session, SessionMiddleware,
+    config::PersistentSession, storage::CookieSessionStore, Session, SessionExt, SessionMiddleware,
 };
-use actix_web::{cookie::Key, dev::Service as _, get, http, middleware, web, App, HttpServer};
+use actix_web::{
+    cookie::Key,
+    dev::{Service, ServiceRequest, ServiceResponse},
+    get, http, middleware, web, App, Error, HttpResponse, HttpServer,
+};
 use diesel::{
     prelude::*,
     r2d2::{self, ConnectionManager},
 };
 use env_logger::Env;
+use middlewares::auth::Authentication;
 use routes::{create_auth_scope, create_room_scope};
+use uuid::Uuid;
 
 mod db;
-mod models;
 mod routes;
+mod services;
+
+mod middlewares;
+mod models;
 mod schema;
 mod server;
 mod session;
+
+mod types;
+mod utils;
 
 #[get("/hello")]
 async fn hello(session: Session) -> String {
@@ -27,7 +39,41 @@ async fn hello(session: Session) -> String {
     "world".to_string()
 }
 
-mod types;
+// async fn auth_middleware(
+//     req: ServiceRequest,
+//     srv: &web::Data<
+//         dyn Service<ServiceRequest = ServiceRequest, Response = ServiceResponse, Error = Error>,
+//     >,
+// ) -> Result<ServiceResponse, Error> {
+//     // Get session from request
+//     let session = req.get_session();
+
+//     // Get the path of the request
+//     let path = req.path();
+
+//     // Allow requests to "/api/auth" without authentication
+//     if path.starts_with("/api/auth") {
+//         return srv.call(req).await;
+//     }
+
+//     // Check if session has "user_id"
+//     let user_id: Option<String> = session.get("user_id").unwrap_or(None);
+
+//     match user_id {
+//         Some(_uid) => {
+//             // If user_id exists, continue to the next service
+//             srv.call(req).await
+//         }
+//         None => {
+//             // If user_id doesn't exist, return an error response
+//             Ok(req.into_response(
+//                 HttpResponse::Unauthorized()
+//                     .json("User not authenticated")
+//                     .into_body(),
+//             ))
+//         }
+//     }
+// }
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -63,6 +109,7 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .app_data(web::Data::new(server.clone()))
             .app_data(web::Data::new(pool.clone()))
+            .wrap(Authentication)
             .wrap(
                 SessionMiddleware::builder(CookieSessionStore::default(), Key::from(&[0; 64]))
                     .cookie_secure(false)
@@ -73,11 +120,6 @@ async fn main() -> std::io::Result<()> {
                     .build(),
             )
             .wrap(cors)
-            // .wrap_fn(|req, srv| {
-            //     println!("origin: {:?}", req.headers().get("Origin").unwrap());
-            //     println!("host: {:?}", req.headers().get("Host").unwrap());
-            //     srv.call(req)
-            // })
             .wrap(middleware::Logger::default())
             .service(web::resource("/").to(routes::index))
             .route("/ws", web::get().to(routes::chat_server))

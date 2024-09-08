@@ -1,4 +1,4 @@
-use crate::models::{Conversation, NewConversation, Room, RoomResponse, User};
+use crate::models::{Conversation, NewConversation, Room, User};
 use bcrypt::{hash, DEFAULT_COST};
 use chrono::{DateTime, Utc};
 use diesel::prelude::*;
@@ -7,7 +7,7 @@ use std::{
     time::SystemTime,
 };
 use uuid::Uuid;
-type DbError = Box<dyn std::error::Error + Send + Sync>;
+pub type DbError = Box<dyn std::error::Error + Send + Sync>;
 
 fn iso_date() -> String {
     let now = SystemTime::now();
@@ -38,7 +38,7 @@ pub fn insert_new_conversation(
         id: Uuid::new_v4().to_string(),
         user_id: new.user_id,
         room_id: new.room_id,
-        content: new.message,
+        message: new.message,
         created_at: iso_date(),
     };
     diesel::insert_into(conversations)
@@ -50,4 +50,5 @@ pub fn insert_new_conversation(
 
 pub mod conversations;
 pub mod rooms;
+pub mod rooms_users;
 pub mod users;
