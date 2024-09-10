@@ -1,4 +1,5 @@
 import {
+  ActionIcon,
   Box,
   Button,
   Flex,
@@ -12,12 +13,14 @@ import {
   UnstyledButton,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconUsers } from '@tabler/icons-react';
+import { IconBug, IconUsers } from '@tabler/icons-react';
 import { ListRoom, User } from '@types';
 import { ActionFunctionArgs, Link, Outlet, useFetcher, useLoaderData, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 import { get } from 'radash';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import useWS from '../../hooks/useWS';
+import { createInitValue, WsContextValue, WSProvider, wsSchema } from '@src/context/ws';
 
 export async function loader(): Promise<ListRoom[]> {
   const res = await fetch('/api/rooms').then(res => res.json());
@@ -123,8 +126,60 @@ export default function ChatRoom() {
     }
   }, [joinRoomFetcher.data, navigate]);
 
+  const [wsContext, setWsContext] = useState<WsContextValue>(createInitValue());
+  useEffect(() => {
+    const _ws = new WebSocket('/ws');
+    _ws.onopen = () => {
+      console.log('Connected to WS');
+      _ws.send(JSON.stringify({ message: 'hello' }));
+    };
+    _ws.onclose = () => {
+      console.log('Disconnected from WS');
+    };
+    _ws.onerror = e => {
+      console.error('WS error:', e);
+    };
+
+    const handleMessage = (event: MessageEvent) => {
+      const data = JSON.parse(event.data);
+
+      const result = wsSchema.safeParse(data);
+      if (!result.success) {
+        return;
+      }
+
+      switch (result.data.type) {
+        case 'init': {
+          const conn_id = result.data.data.conn_id;
+          setWsContext(prev => {
+            return {
+              ...prev,
+              conn_id,
+            };
+          });
+          break;
+        }
+      }
+    };
+
+    _ws.addEventListener('message', handleMessage);
+
+    setWsContext(prev => {
+      return {
+        ...prev,
+        ws: _ws,
+      };
+    });
+
+    return () => {
+      console.log('Closing WS');
+      _ws.removeEventListener('message', handleMessage);
+      _ws.close();
+    };
+  }, []);
+
   return (
-    <>
+    <WSProvider value={wsContext}>
       <Grid
         gutter={0}
         className="min-h-screen"
@@ -138,6 +193,29 @@ export default function ChatRoom() {
               <Button w="100%" onClick={open}>
                 Create New Room
               </Button>
+              <Box mt="md">
+                <form
+                  onSubmit={e => {
+                    e.preventDefault();
+                    const formData = Object.fromEntries(new FormData(e.target as HTMLFormElement));
+                    wsContext.ws?.send(formData.command);
+                  }}
+                >
+                  <TextInput
+                    autoComplete="off"
+                    type="text"
+                    name="command"
+                    placeholder="Debug command"
+                    rightSection={
+                      <ActionIcon variant="outline" size="sm">
+                        <UnstyledButton type="submit">
+                          <IconBug size={16} />
+                        </UnstyledButton>
+                      </ActionIcon>
+                    }
+                  />
+                </form>
+              </Box>
               <Box>
                 <joinRoomFetcher.Form method="post">
                   {rooms.map(room => (
@@ -174,7 +252,7 @@ export default function ChatRoom() {
             </logoutFetcher.Form>
           </Flex>
         </Grid.Col>
-        <Grid.Col span={9} p="0" className="border-l">
+        <Grid.Col span={9} p="0" className="border-l max-h-screen">
           <Outlet />
         </Grid.Col>
       </Grid>
@@ -195,6 +273,6 @@ export default function ChatRoom() {
           </Flex>
         </createRoomFetcher.Form>
       </Modal>
-    </>
+    </WSProvider>
   );
 }

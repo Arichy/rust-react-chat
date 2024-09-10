@@ -1,5 +1,4 @@
 #![allow(unused)]
-use actix::*;
 use actix_cors::Cors;
 use actix_files::Files;
 use actix_session::{
@@ -8,7 +7,7 @@ use actix_session::{
 use actix_web::{
     cookie::Key,
     dev::{Service, ServiceRequest, ServiceResponse},
-    get, http, middleware, web, App, Error, HttpResponse, HttpServer,
+    get, http, middleware, web, App, Error, HttpRequest, HttpResponse, HttpServer,
 };
 use diesel::{
     prelude::*,
@@ -16,7 +15,10 @@ use diesel::{
 };
 use env_logger::Env;
 use middlewares::auth::Authentication;
-use routes::{create_auth_scope, create_room_scope};
+use models::Conversation;
+use routes::{create_auth_scope, create_conversation_scope, create_room_scope};
+use server::ChatServer;
+use tokio::{task::spawn, try_join};
 use uuid::Uuid;
 
 mod db;
@@ -27,10 +29,15 @@ mod middlewares;
 mod models;
 mod schema;
 mod server;
-mod session;
+// mod session;
 
 mod types;
 mod utils;
+
+pub type ConnId = usize;
+pub type RoomId = String;
+pub type Msg = String;
+pub type UserId = String;
 
 #[get("/hello")]
 async fn hello(session: Session) -> String {
@@ -39,45 +46,10 @@ async fn hello(session: Session) -> String {
     "world".to_string()
 }
 
-// async fn auth_middleware(
-//     req: ServiceRequest,
-//     srv: &web::Data<
-//         dyn Service<ServiceRequest = ServiceRequest, Response = ServiceResponse, Error = Error>,
-//     >,
-// ) -> Result<ServiceResponse, Error> {
-//     // Get session from request
-//     let session = req.get_session();
-
-//     // Get the path of the request
-//     let path = req.path();
-
-//     // Allow requests to "/api/auth" without authentication
-//     if path.starts_with("/api/auth") {
-//         return srv.call(req).await;
-//     }
-
-//     // Check if session has "user_id"
-//     let user_id: Option<String> = session.get("user_id").unwrap_or(None);
-
-//     match user_id {
-//         Some(_uid) => {
-//             // If user_id exists, continue to the next service
-//             srv.call(req).await
-//         }
-//         None => {
-//             // If user_id doesn't exist, return an error response
-//             Ok(req.into_response(
-//                 HttpResponse::Unauthorized()
-//                     .json("User not authenticated")
-//                     .into_body(),
-//             ))
-//         }
-//     }
-// }
-
-#[actix_web::main]
+// #[actix_web::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> std::io::Result<()> {
-    let server = server::ChatServer::new().start();
+    // let server = server::ChatServer::new().start();
     let conn_spec = "chat.db";
     let manager = ConnectionManager::<SqliteConnection>::new(conn_spec);
     let pool = r2d2::Pool::builder()
@@ -87,6 +59,10 @@ async fn main() -> std::io::Result<()> {
     let server_port = 8080;
 
     env_logger::init_from_env(Env::default().default_filter_or("info"));
+
+    let (chat_server, server_tx) = ChatServer::new(pool.clone());
+
+    let chat_server = spawn(chat_server.run());
 
     let app = HttpServer::new(move || {
         let cors = Cors::default()
@@ -100,15 +76,18 @@ async fn main() -> std::io::Result<()> {
 
         let auth_scope = create_auth_scope();
         let room_scope = create_room_scope();
+        let conversation_scope = create_conversation_scope();
 
         let api_scope = web::scope("/api")
             .service(hello)
             .service(auth_scope)
-            .service(room_scope);
+            .service(room_scope)
+            .service(conversation_scope);
 
         App::new()
-            .app_data(web::Data::new(server.clone()))
+            // .app_data(web::Data::new(server.clone()))
             .app_data(web::Data::new(pool.clone()))
+            .app_data(web::Data::new(server_tx.clone()))
             .wrap(Authentication)
             .wrap(
                 SessionMiddleware::builder(CookieSessionStore::default(), Key::from(&[0; 64]))
@@ -122,14 +101,19 @@ async fn main() -> std::io::Result<()> {
             .wrap(cors)
             .wrap(middleware::Logger::default())
             .service(web::resource("/").to(routes::index))
-            .route("/ws", web::get().to(routes::chat_server))
+            // .route("/ws", web::get().to(routes::ws::chat_ws))
+            .service(web::resource("/ws").route(web::get().to(routes::ws::chat_ws)))
             .service(api_scope)
             .service(Files::new("/", "./static"))
+            .wrap(middleware::NormalizePath::trim())
     })
     .workers(2)
     .bind((server_addr, server_port))?
     .run();
 
-    println!("Server running at http://{server_addr}:{server_port}/");
-    app.await
+    log::info!("Server running at http://{server_addr}:{server_port}");
+
+    try_join!(app, async move { chat_server.await.unwrap() })?;
+
+    Ok(())
 }

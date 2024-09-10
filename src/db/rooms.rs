@@ -14,7 +14,7 @@ use std::{
 };
 
 use uuid::Uuid;
-
+// use crate::schema::rooms_users::dsl::rooms_users;
 use super::{iso_date, DbError};
 
 pub fn get_room(
@@ -101,7 +101,7 @@ pub fn delete_room(conn: &mut SqliteConnection, room_id: &str) -> Result<(), DbE
     use crate::schema::rooms;
     use crate::schema::rooms_users;
 
-    let tmp = conn.transaction(|connection| {
+    conn.transaction(|connection| {
         // delete room
         diesel::delete(rooms::table.filter(rooms::id.eq(room_id))).execute(connection)?;
 
@@ -117,4 +117,12 @@ pub fn delete_room(conn: &mut SqliteConnection, room_id: &str) -> Result<(), DbE
     });
 
     Ok(())
+}
+
+pub fn get_user_joined_rooms(conn: &mut SqliteConnection, user_id: String) -> Result<Vec<Room>, DbError> {
+    // use crate::schema::{rooms, rooms_users};
+
+    let rooms = rooms_users::table.filter(rooms_users::user_id.eq(user_id)).inner_join(rooms::table).select(Room::as_select()).load(conn)?;
+
+    Ok(rooms)
 }

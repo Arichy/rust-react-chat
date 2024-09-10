@@ -53,7 +53,7 @@ where
         let user_id = req.get_session().get::<Uuid>("user_id").unwrap_or(None);
 
         if user_id.is_none()
-            && !(path.starts_with("/api/auth") && !path.starts_with("/api/auth/user"))
+            && !(path.starts_with("/api/auth") && !path.starts_with("/api/auth/user") || path.starts_with("/ws"))
         {
             Box::pin(async move {
                 let request = req.into_parts().0;

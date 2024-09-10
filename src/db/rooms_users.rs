@@ -2,6 +2,8 @@ use diesel::prelude::*;
 use serde_json::json;
 use uuid::Uuid;
 
+use crate::models::{ListRoomResponse, RoomUser};
+
 use super::DbError;
 
 pub fn join_room(conn: &mut SqliteConnection, user_id: Uuid, room_id: Uuid) -> Result<(), DbError> {

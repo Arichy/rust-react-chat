@@ -13,7 +13,7 @@ export type Conversation = {
   user_id: string;
   room_id: string;
   message: string;
-  created_at: number;
+  created_at: string;
 };
 
 export type ListRoom = {
@@ -21,7 +21,7 @@ export type ListRoom = {
     id: string;
     name: string;
     last_message: string;
-    created_at: number;
+    created_at: string;
     owner_id: string;
   };
   users: User[];

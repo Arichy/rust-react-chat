@@ -9,6 +9,7 @@ actix-files = "0.6.2"
 actix-session = { version = "0.10.0", features = ["cookie-session"] }
 actix-web = "4.2.1"
 actix-web-actors = "4.1.0"
+actix-ws = "0.3.0"
 bcrypt = "0.15"
 rand = "0.8.5"
 serde = { version = "1.0.147", features = ["derive"] }
@@ -24,3 +25,4 @@ actix-cors = "0.6.4"
 env_logger = "0.11"
 tokio = { version = "1.40", features = ["macros"] }
 futures-util = "*"
+log = "0.4"

@@ -1,14 +1,13 @@
 use crate::db;
 use crate::models;
 use crate::server;
-use crate::session;
+// use crate::session;
 use crate::types::DbPool;
 use actix::*;
 use actix_files::NamedFile;
 use actix_session::Session;
 use actix_web::error::ErrorInternalServerError;
 use actix_web::{get, post, web, Error, HttpRequest, HttpResponse, Responder, Scope};
-use actix_web_actors::ws;
 use bcrypt::verify;
 use diesel::result::DatabaseErrorKind;
 use diesel::{
@@ -25,25 +24,25 @@ pub async fn index() -> impl Responder {
     NamedFile::open_async("./static/index.html").await.unwrap()
 }
 
-pub async fn chat_server(
-    req: HttpRequest,
-    stream: web::Payload,
-    pool: web::Data<DbPool>,
-    srv: web::Data<Addr<server::ChatServer>>,
-) -> Result<HttpResponse, Error> {
-    ws::start(
-        session::WsChatSession {
-            id: 0,
-            hb: Instant::now(),
-            room: "main".to_string(),
-            name: None,
-            addr: srv.get_ref().clone(),
-            db_pool: pool,
-        },
-        &req,
-        stream,
-    )
-}
+// pub async fn chat_server(
+//     req: HttpRequest,
+//     stream: web::Payload,
+//     pool: web::Data<DbPool>,
+//     srv: web::Data<Addr<server::ChatServer>>,
+// ) -> Result<HttpResponse, Error> {
+//     ws::start(
+//         session::WsChatSession {
+//             id: 0,
+//             hb: Instant::now(),
+//             room: "main".to_string(),
+//             name: None,
+//             addr: srv.get_ref().clone(),
+//             db_pool: pool,
+//         },
+//         &req,
+//         stream,
+//     )
+// }
 
 #[get("/conversations/{uid}")]
 pub async fn get_conversation_by_id(
@@ -75,6 +74,7 @@ pub mod auth;
 pub mod conversations;
 pub mod rooms;
 pub mod users;
+pub mod ws;
 
 pub fn create_auth_scope() -> Scope {
     web::scope("/auth")
@@ -91,4 +91,8 @@ pub fn create_room_scope() -> Scope {
         .service(rooms::join_room)
         .service(rooms::exit_room)
         .service(rooms::get_room)
+}
+
+pub fn create_conversation_scope() -> Scope {
+    web::scope("/conversations").service(conversations::create_conversation)
 }
