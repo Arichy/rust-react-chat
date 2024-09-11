@@ -1,6 +1,6 @@
 #![allow(unused)]
 use actix_cors::Cors;
-use actix_files::Files;
+use actix_files::{Files, NamedFile};
 use actix_session::{
     config::PersistentSession, storage::CookieSessionStore, Session, SessionExt, SessionMiddleware,
 };
@@ -9,6 +9,7 @@ use actix_web::{
     dev::{Service, ServiceRequest, ServiceResponse},
     get, http, middleware, web, App, Error, HttpRequest, HttpResponse, HttpServer,
 };
+use actix_web_lab::web::spa;
 use diesel::{
     prelude::*,
     r2d2::{self, ConnectionManager},
@@ -46,10 +47,16 @@ async fn hello(session: Session) -> String {
     "world".to_string()
 }
 
+#[get("/auth")]
+async fn auth(session: Session) -> String {
+    println!("{:?}", session.entries());
+
+    "world".to_string()
+}
+
 // #[actix_web::main]
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> std::io::Result<()> {
-    // let server = server::ChatServer::new().start();
     let conn_spec = "chat.db";
     let manager = ConnectionManager::<SqliteConnection>::new(conn_spec);
     let pool = r2d2::Pool::builder()
@@ -85,7 +92,6 @@ async fn main() -> std::io::Result<()> {
             .service(conversation_scope);
 
         App::new()
-            // .app_data(web::Data::new(server.clone()))
             .app_data(web::Data::new(pool.clone()))
             .app_data(web::Data::new(server_tx.clone()))
             .wrap(Authentication)
@@ -100,11 +106,13 @@ async fn main() -> std::io::Result<()> {
             )
             .wrap(cors)
             .wrap(middleware::Logger::default())
-            .service(web::resource("/").to(routes::index))
-            // .route("/ws", web::get().to(routes::ws::chat_ws))
             .service(web::resource("/ws").route(web::get().to(routes::ws::chat_ws)))
             .service(api_scope)
-            .service(Files::new("/", "./static"))
+            .service(spa()
+                .index_file("./static/index.html")
+                .static_resources_mount("/")
+                .static_resources_location("./static")
+                .finish())
             .wrap(middleware::NormalizePath::trim())
     })
     .workers(2)

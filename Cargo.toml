@@ -26,3 +26,4 @@ env_logger = "0.11"
 tokio = { version = "1.40", features = ["macros"] }
 futures-util = "*"
 log = "0.4"
+actix-web-lab = { version = "0.22.0", features = ["spa"] }

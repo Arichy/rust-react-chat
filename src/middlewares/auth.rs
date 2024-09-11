@@ -35,6 +35,18 @@ pub struct AuthenticationMiddleware<S> {
     service: S,
 }
 
+fn is_public_path(path: &str) -> bool {
+    if !path.starts_with("/api") {
+        return true;
+    }
+
+    if path.starts_with("/api/auth") && !path.starts_with("/api/auth/user") {
+        return true;
+    }
+
+    false
+}
+
 impl<S, B> Service<ServiceRequest> for AuthenticationMiddleware<S>
 where
     S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error>,
@@ -52,9 +64,7 @@ where
 
         let user_id = req.get_session().get::<Uuid>("user_id").unwrap_or(None);
 
-        if user_id.is_none()
-            && !(path.starts_with("/api/auth") && !path.starts_with("/api/auth/user") || path.starts_with("/ws"))
-        {
+        if user_id.is_none() && !is_public_path(path) {
             Box::pin(async move {
                 let request = req.into_parts().0;
                 let response = HttpResponse::Unauthorized()
