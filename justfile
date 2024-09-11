@@ -1,2 +1,2 @@
 dev:
-  cargo watch -i frontend -i migrations -x run
+  cargo watch -i frontend -i migrations -i imgs -x run
