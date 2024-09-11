@@ -50,7 +50,6 @@ enum Command {
     //     room: RoomId,
     //     res_tx: oneshot::Sender<()>,
     // },
-
     Join {
         conn: ConnId,
         room: RoomId,
@@ -67,6 +66,12 @@ enum Command {
         msg: Msg,
         conn: ConnId,
         room_id: RoomId,
+        res_tx: oneshot::Sender<()>,
+    },
+
+    Broadcast {
+        msg: Msg,
+        conn: ConnId,
         res_tx: oneshot::Sender<()>,
     },
 }
@@ -104,6 +109,17 @@ impl ChatServer {
             },
             ChatServerHandle { cmd_tx },
         )
+    }
+
+    async fn broadcast(&self, conn: ConnId, msg: impl Into<Msg>) {
+        let msg = msg.into();
+
+        for (conn_id, (tx, _)) in &self.sessions {
+            if *conn_id == conn {
+                continue;
+            }
+            tx.send(msg.clone());
+        }
     }
 
     /// Send message to users in a room.
@@ -277,6 +293,11 @@ impl ChatServer {
                     self.send_mesage(conn, room_id, msg).await;
                     res_tx.send(());
                 }
+
+                Command::Broadcast { msg, conn, res_tx } => {
+                    self.broadcast(conn, msg).await;
+                    res_tx.send(());
+                }
             }
         }
 
@@ -323,6 +344,16 @@ impl ChatServerHandle {
                 room_id,
                 res_tx,
             })
+            .unwrap();
+
+        res_rx.await.unwrap()
+    }
+
+    pub async fn broadcast(&self, conn: ConnId, msg: Msg) {
+        let (res_tx, res_rx) = oneshot::channel();
+
+        self.cmd_tx
+            .send(Command::Broadcast { msg, conn, res_tx })
             .unwrap();
 
         res_rx.await.unwrap()

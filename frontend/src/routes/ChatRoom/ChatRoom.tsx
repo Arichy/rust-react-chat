@@ -1,17 +1,4 @@
-import {
-  ActionIcon,
-  Box,
-  Button,
-  Flex,
-  Grid,
-  Group,
-  Modal,
-  ScrollArea,
-  Text,
-  TextInput,
-  Title,
-  UnstyledButton,
-} from '@mantine/core';
+import { ActionIcon, Box, Button, Flex, Grid, Group, Modal, ScrollArea, Text, TextInput, Title } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { IconBug, IconUsers } from '@tabler/icons-react';
 import { ListRoom, User } from '@types';
@@ -19,7 +6,6 @@ import { ActionFunctionArgs, Link, Outlet, useFetcher, useLoaderData, useNavigat
 import { z } from 'zod';
 import { get } from 'radash';
 import { useEffect, useState } from 'react';
-import useWS from '../../hooks/useWS';
 import { createInitValue, WsContextValue, WSProvider, wsSchema } from '@src/context/ws';
 
 export async function loader(): Promise<ListRoom[]> {
@@ -31,7 +17,7 @@ const ACTION_TYPES = {
   LOGOUT: 'logout',
   CREATE_ROOM: 'create_room',
   JOIN_ROOM: 'join_room',
-};
+} as const;
 
 const logoutActionSchema = z.object({
   type: z.literal(ACTION_TYPES.LOGOUT),
@@ -44,6 +30,7 @@ const createRoomActionSchema = z.object({
 
 const joinRoomActionSchema = z.object({
   type: z.literal(ACTION_TYPES.JOIN_ROOM),
+  conn_id: z.string(),
   room_id: z.string(),
 });
 
@@ -66,8 +53,6 @@ export async function action({ request }: ActionFunctionArgs) {
       },
     };
   }
-
-  console.log(result.data);
 
   switch (result.data.type) {
     case ACTION_TYPES.LOGOUT:
@@ -100,6 +85,9 @@ export async function action({ request }: ActionFunctionArgs) {
       const data = result.data as z.infer<typeof joinRoomActionSchema>;
       const res = await fetch(`/api/rooms/${data.room_id}/join`, {
         method: 'post',
+        headers: {
+          'Conn-Id': data.conn_id,
+        },
       });
 
       return {
@@ -111,13 +99,19 @@ export async function action({ request }: ActionFunctionArgs) {
 }
 
 export default function ChatRoom() {
-  const rooms = useLoaderData() as ListRoom[];
+  const initRooms = useLoaderData() as ListRoom[];
+  const [rooms, setRooms] = useState(initRooms);
   const navigate = useNavigate();
   const logoutFetcher = useFetcher();
 
   const [createRoomModalOpened, { open, close }] = useDisclosure(false);
 
   const createRoomFetcher = useFetcher();
+  useEffect(() => {
+    if (createRoomFetcher.data && createRoomFetcher.data.status === 200) {
+      close();
+    }
+  }, [createRoomFetcher.data, close]);
 
   const joinRoomFetcher = useFetcher();
   useEffect(() => {
@@ -156,6 +150,36 @@ export default function ChatRoom() {
               ...prev,
               conn_id,
             };
+          });
+          break;
+        }
+        case 'join_room': {
+          const { room_id, user } = result.data.data;
+          setRooms(prev => {
+            return prev.map(room => {
+              if (room.room.id === room_id) {
+                return {
+                  ...room,
+                  users: [...room.users, user],
+                };
+              }
+              return room;
+            });
+          });
+          break;
+        }
+        case 'exit_room': {
+          const { room_id, user_id } = result.data.data;
+          setRooms(prev => {
+            return prev.map(room => {
+              if (room.room.id === room_id) {
+                return {
+                  ...room,
+                  users: room.users.filter(user => user.id !== user_id),
+                };
+              }
+              return room;
+            });
           });
           break;
         }
@@ -207,10 +231,8 @@ export default function ChatRoom() {
                     name="command"
                     placeholder="Debug command"
                     rightSection={
-                      <ActionIcon variant="outline" size="sm">
-                        <UnstyledButton type="submit">
-                          <IconBug size={16} />
-                        </UnstyledButton>
+                      <ActionIcon variant="outline" size="sm" type="submit">
+                        <IconBug size={16} />
                       </ActionIcon>
                     }
                   />
@@ -226,7 +248,10 @@ export default function ChatRoom() {
                       key={room.room.id}
                       h="6rem"
                       onClick={() => {
-                        joinRoomFetcher.submit({ type: 'join_room', room_id: room.room.id }, { method: 'post' });
+                        joinRoomFetcher.submit(
+                          { type: 'join_room', room_id: room.room.id, conn_id: wsContext.conn_id || '' },
+                          { method: 'post' }
+                        );
                       }}
                     >
                       <Group gap="0" justify="space-between">
@@ -259,6 +284,7 @@ export default function ChatRoom() {
       <Modal opened={createRoomModalOpened} onClose={close} title="Create New Room">
         <createRoomFetcher.Form method="post">
           <input type="hidden" name="type" value={ACTION_TYPES.CREATE_ROOM} />
+          <input type="hidden" name="conn_id" value={wsContext.conn_id || ''} />
           <TextInput
             type="text"
             placeholder="Room Name"

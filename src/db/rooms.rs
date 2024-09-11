@@ -1,4 +1,5 @@
 use crate::models::*;
+use diesel::prelude::*;
 
 use crate::{
     models::{Conversation, ListRoomResponse, NewConversation, Room, RoomResponse, RoomUser, User},
@@ -46,10 +47,32 @@ pub fn get_room(
         .select(Conversation::as_select())
         .load(conn)?;
 
+    let exited_user_ids: HashSet<&String> = {
+        let mut user_ids = HashSet::new();
+        for user in &users {
+            user_ids.insert(&user.id);
+        }
+
+        let mut conversation_user_ids = HashSet::new();
+        for c in &conversations {
+            conversation_user_ids.insert(&c.user_id);
+        }
+
+        conversation_user_ids
+            .difference(&user_ids) // HashSet 的 difference 方法
+            .cloned() // 克隆值，因为 difference 返回的是 &String
+            .collect()
+    };
+
+    let exited_users = users::table
+        .filter(users::id.eq_any(exited_user_ids))
+        .load::<User>(conn)?;
+
     Ok(Some(RoomResponse {
         room,
         users,
         conversations,
+        exited_users,
     }))
 }
 
@@ -119,10 +142,17 @@ pub fn delete_room(conn: &mut SqliteConnection, room_id: &str) -> Result<(), DbE
     Ok(())
 }
 
-pub fn get_user_joined_rooms(conn: &mut SqliteConnection, user_id: String) -> Result<Vec<Room>, DbError> {
+pub fn get_user_joined_rooms(
+    conn: &mut SqliteConnection,
+    user_id: String,
+) -> Result<Vec<Room>, DbError> {
     // use crate::schema::{rooms, rooms_users};
 
-    let rooms = rooms_users::table.filter(rooms_users::user_id.eq(user_id)).inner_join(rooms::table).select(Room::as_select()).load(conn)?;
+    let rooms = rooms_users::table
+        .filter(rooms_users::user_id.eq(user_id))
+        .inner_join(rooms::table)
+        .select(Room::as_select())
+        .load(conn)?;
 
     Ok(rooms)
 }

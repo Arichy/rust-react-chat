@@ -47,4 +47,26 @@ const wsCreateRoomSchema = z.object({
   }),
 });
 
-export const wsSchema = z.discriminatedUnion('type', [wsInitSchema, wsCreateMessageSchema, wsCreateRoomSchema]);
+const wsJoinRoomSchema = z.object({
+  type: z.literal('join_room'),
+  data: z.object({
+    room_id: z.string(),
+    user: z.object({ id: z.string(), username: z.string() }),
+  }),
+});
+
+const wsExitRoomSchema = z.object({
+  type: z.literal('exit_room'),
+  data: z.object({
+    room_id: z.string(),
+    user_id: z.string(),
+  }),
+});
+
+export const wsSchema = z.discriminatedUnion('type', [
+  wsInitSchema,
+  wsCreateMessageSchema,
+  wsCreateRoomSchema,
+  wsJoinRoomSchema,
+  wsExitRoomSchema,
+]);

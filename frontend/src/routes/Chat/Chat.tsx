@@ -31,6 +31,7 @@ import { objectify } from 'radash';
 import { formatDate } from '@src/utils';
 import { useWS, wsSchema } from '@src/context/ws';
 import clsx from 'clsx';
+import { z } from 'zod';
 
 export async function loader({ params }: LoaderFunctionArgs): Promise<Room> {
   const roomId = params.id;
@@ -49,16 +50,44 @@ const ACTION_TYPES = {
   DELETE_ROOM: 'delete_room',
   LEAVE_ROOM: 'leave_room',
   SEND_MESSAGE: 'send_message',
-};
+} as const;
 
 type ActionData = { status: number };
+
+const actionSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal(ACTION_TYPES.DELETE_ROOM),
+  }),
+  z.object({
+    type: z.literal(ACTION_TYPES.LEAVE_ROOM),
+    conn_id: z.string(),
+  }),
+  z.object({
+    type: z.literal(ACTION_TYPES.SEND_MESSAGE),
+    conn_id: z.string(),
+    room_id: z.string(),
+    message: z.string(),
+  }),
+]);
 
 export async function action({ request, params }: LoaderFunctionArgs) {
   const room_id = params.id!;
   const formData = await request.formData();
   const formDataObj = Object.fromEntries(formData);
+  const result = actionSchema.safeParse(formDataObj);
+  if (!result.success) {
+    return {
+      status: 400,
+      data: {
+        success: false,
+        message: result.error.errors,
+      },
+    };
+  }
 
-  switch (formDataObj.type) {
+  const data = result.data;
+
+  switch (data.type) {
     case ACTION_TYPES.DELETE_ROOM: {
       // const res = await fetch(`/api/rooms/${formDataObj.room_id}`, {
       //   method: 'delete',
@@ -74,6 +103,9 @@ export async function action({ request, params }: LoaderFunctionArgs) {
     case ACTION_TYPES.LEAVE_ROOM: {
       const res = await fetch(`/api/rooms/${room_id}/exit`, {
         method: 'post',
+        headers: {
+          'Conn-Id': data.conn_id,
+        },
       });
 
       return {
@@ -84,9 +116,10 @@ export async function action({ request, params }: LoaderFunctionArgs) {
     case ACTION_TYPES.SEND_MESSAGE: {
       const res = await fetch(`/api/conversations`, {
         method: 'post',
-        body: JSON.stringify(formDataObj),
+        body: JSON.stringify(data),
         headers: {
           'Content-Type': 'application/json',
+          'Conn-Id': data.conn_id,
         },
       });
 
@@ -160,7 +193,7 @@ export default function Chat() {
   const sendMessageFetcher = useFetcher();
 
   const userHash = useMemo(() => {
-    return objectify(roomData.users, user => user.id);
+    return objectify([...roomData.users, ...roomData.exited_users], user => user.id);
   }, [roomData]);
 
   // const optimisticConversation = useMemo(() => {
@@ -234,6 +267,7 @@ export default function Chat() {
           ) : null}
           <leaveRoomFetcher.Form method="post">
             <input type="hidden" name="type" value={ACTION_TYPES.LEAVE_ROOM} />
+            <input type="hidden" name="conn_id" value={conn_id || ''} />
             <Button variant="outline" color="red" size="sm" type="submit" leftSection={<IconLogout />}>
               <Text size="sm">Leave</Text>
             </Button>

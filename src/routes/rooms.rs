@@ -1,8 +1,16 @@
 use std::str::FromStr;
 
-use crate::{db, services, types::DbPool, utils::get_user_id};
+use crate::{
+    db,
+    server::ChatServerHandle,
+    services,
+    types::DbPool,
+    utils::{get_conn_id, get_user_id},
+};
 use actix_session::Session;
-use actix_web::{delete, error::ErrorInternalServerError, get, post, web, Error, HttpResponse};
+use actix_web::{
+    delete, error::ErrorInternalServerError, get, post, web, Error, HttpRequest, HttpResponse,
+};
 use futures_util::TryFutureExt;
 use serde::Deserialize;
 use serde_json::json;
@@ -69,32 +77,78 @@ pub async fn create_room(
 
 #[post("/{room_id}/join")]
 pub async fn join_room(
+    request: HttpRequest,
     pool: web::Data<DbPool>,
     session: Session,
     room_id: web::Path<Uuid>,
+    chat_server: web::Data<ChatServerHandle>,
 ) -> Result<HttpResponse, Error> {
     let room_id = room_id.to_owned();
     let user_id = get_user_id(&session);
+    // let conn_id = get_conn_id(&request);
 
-    let res = services::rooms::join_room(pool, user_id, room_id)
+    let _ = services::rooms::join_room(pool.clone(), user_id, room_id)
         .await
         .map_err(ErrorInternalServerError);
+
+    // if !conn_id.is_err() {
+    let user = services::users::find_user_by_uid(pool, user_id)
+        .await
+        .map_err(ErrorInternalServerError)?
+        .unwrap();
+
+    chat_server
+        .broadcast(
+            // conn_id.unwrap(),
+            0,
+            json!({
+                "type": "join_room",
+                "data": {
+                    "room_id": room_id.to_string(),
+                    "user": user,
+                }
+            })
+            .to_string(),
+        )
+        .await;
+    // }
 
     Ok(HttpResponse::Ok().finish())
 }
 
 #[post("/{room_id}/exit")]
 pub async fn exit_room(
+    request: HttpRequest,
     pool: web::Data<DbPool>,
     session: Session,
     room_id: web::Path<Uuid>,
+    chat_server: web::Data<ChatServerHandle>,
 ) -> Result<HttpResponse, Error> {
     let room_id = room_id.to_owned();
     let user_id = get_user_id(&session);
+    // let conn_id = get_conn_id(&request);
 
-    let res = services::rooms::exit_room(pool, user_id, room_id)
+    let _ = services::rooms::exit_room(pool, user_id, room_id)
         .await
         .map_err(ErrorInternalServerError);
+
+    // if !conn_id.is_err() {
+    chat_server
+        .broadcast(
+            // conn_id.unwrap(),
+            0,
+            json!({
+                "type": "exit_room",
+                "data": {
+                    "room_id": room_id.to_string(),
+                    "user_id": user_id.to_string(),
+                }
+            })
+            .to_string(),
+        )
+        .await;
+    // }
+    // send ws messages
 
     Ok(HttpResponse::Ok().finish())
 }

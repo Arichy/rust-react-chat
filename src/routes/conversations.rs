@@ -1,22 +1,28 @@
 use actix_session::Session;
 use actix_web::{
     error::{Error, ErrorInternalServerError},
-    post, web, HttpResponse,
+    post, web, HttpRequest, HttpResponse,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::{db, server::ChatServerHandle, types::DbPool, utils::get_user_id};
+use crate::{
+    db,
+    server::ChatServerHandle,
+    types::DbPool,
+    utils::{get_conn_id, get_user_id},
+    ConnId,
+};
 
 #[derive(Debug, Serialize, Deserialize)]
 struct CreateConversation {
-    conn_id: String,
     message: String,
     room_id: String,
 }
 
 #[post("")]
 pub async fn create_conversation(
+    request: HttpRequest,
     pool: web::Data<DbPool>,
     form_data: web::Json<CreateConversation>,
     session: Session,
@@ -25,21 +31,9 @@ pub async fn create_conversation(
     println!("enter create conversation");
     println!("{:?}", session.entries());
     let user_id = get_user_id(&session);
+    let conn_id = get_conn_id(&request)?;
 
-    let CreateConversation {
-        conn_id,
-        message,
-        room_id,
-    } = form_data.0;
-
-    let conn_id: Result<usize, _> = conn_id.parse();
-    if conn_id.is_err() {
-        return Ok(HttpResponse::BadRequest().json(json!({
-            "message": "Invalid conn_id",
-        })));
-    }
-
-    let conn_id = conn_id.unwrap();
+    let CreateConversation { message, room_id } = form_data.0;
 
     let res = {
         let message = message.clone();

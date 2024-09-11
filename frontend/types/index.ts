@@ -29,4 +29,5 @@ export type ListRoom = {
 
 export type Room = ListRoom & {
   conversations: Conversation[];
+  exited_users: User[];
 };

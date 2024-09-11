@@ -30,3 +30,4 @@ For learning purpose only.
     1. Back to root folder: `cd ../`
     2. `cargo run`
 
+5. `localhost:8080`

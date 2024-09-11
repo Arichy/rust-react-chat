@@ -85,4 +85,5 @@ pub struct RoomResponse {
     pub room: Room,
     pub users: Vec<User>,
     pub conversations: Vec<Conversation>,
+    pub exited_users: Vec<User>,
 }
