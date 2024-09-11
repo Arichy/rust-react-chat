@@ -4,6 +4,7 @@ import { User } from '@types';
 
 export async function loader() {
   const res = await fetch('/api/auth/user');
+  console.log(res);
   if (res.status === 401) {
     return redirect('/auth');
   }
