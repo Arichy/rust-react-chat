@@ -2,3 +2,4 @@
 static
 .idea
 *.db
+.vscode
