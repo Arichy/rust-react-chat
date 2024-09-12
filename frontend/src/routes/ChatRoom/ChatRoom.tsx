@@ -6,7 +6,8 @@ import { ActionFunctionArgs, Link, Outlet, useFetcher, useLoaderData, useNavigat
 import { z } from 'zod';
 import { get } from 'radash';
 import { useEffect, useState } from 'react';
-import { createInitValue, WsContextValue, WSProvider, wsSchema } from '@src/context/ws';
+import { createInitValue, useWS, WsContextValue, WSProvider, wsSchema } from '@src/context/ws';
+import { useUser } from '@src/context/user';
 
 export async function loader(): Promise<ListRoom[]> {
   const res = await fetch('/api/rooms').then(res => res.json());
@@ -75,6 +76,13 @@ export async function action({ request }: ActionFunctionArgs) {
         },
       });
 
+      if (res.status !== 200) {
+        return {
+          status: res.status,
+          error: await res.text(),
+        };
+      }
+
       return {
         status: res.status,
         data: await res.json(),
@@ -98,7 +106,45 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 }
 
+function CreateRoomModalForm({ close }: { close: () => void }) {
+  const wsContext = useWS();
+  const createRoomFetcher = useFetcher();
+  useEffect(() => {
+    if (createRoomFetcher.data) {
+      if (createRoomFetcher.data.status === 200) {
+        close();
+      }
+    }
+  }, [createRoomFetcher.data, close]);
+
+  return (
+    <createRoomFetcher.Form method="post">
+      <input type="hidden" name="type" value={ACTION_TYPES.CREATE_ROOM} />
+      <input type="hidden" name="conn_id" value={wsContext.conn_id || ''} />
+      <TextInput
+        type="text"
+        placeholder="Room Name"
+        name="room_name"
+        error={
+          get(createRoomFetcher, 'data.data.message.room_name', null) || get(createRoomFetcher, 'data.error', null)
+        }
+      />
+      <Flex justify="end" mt="xl" gap="md">
+        <Button onClick={close} variant="outline">
+          Close
+        </Button>
+        <Button type="submit">Create</Button>
+      </Flex>
+    </createRoomFetcher.Form>
+  );
+}
+
+export type RouteContext = {
+  rooms: ListRoom[];
+};
+
 export default function ChatRoom() {
+  const user = useUser();
   const initRooms = useLoaderData() as ListRoom[];
   const [rooms, setRooms] = useState(initRooms);
   const navigate = useNavigate();
@@ -108,8 +154,10 @@ export default function ChatRoom() {
 
   const createRoomFetcher = useFetcher();
   useEffect(() => {
-    if (createRoomFetcher.data && createRoomFetcher.data.status === 200) {
-      close();
+    if (createRoomFetcher.data) {
+      if (createRoomFetcher.data.status === 200) {
+        close();
+      }
     }
   }, [createRoomFetcher.data, close]);
 
@@ -134,6 +182,25 @@ export default function ChatRoom() {
       console.error('WS error:', e);
     };
 
+    setWsContext(prev => {
+      return {
+        ...prev,
+        ws: _ws,
+      };
+    });
+
+    return () => {
+      console.log('Closing WS');
+      _ws.close();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!wsContext.ws) {
+      return;
+    }
+    const ws = wsContext.ws;
+
     const handleMessage = (event: MessageEvent) => {
       const data = JSON.parse(event.data);
 
@@ -155,9 +222,13 @@ export default function ChatRoom() {
         }
         case 'join_room': {
           const { room_id, user } = result.data.data;
+
           setRooms(prev => {
             return prev.map(room => {
               if (room.room.id === room_id) {
+                if (room.users.find(u => u.id === user.id)) {
+                  return room;
+                }
                 return {
                   ...room,
                   users: [...room.users, user],
@@ -166,8 +237,10 @@ export default function ChatRoom() {
               return room;
             });
           });
+
           break;
         }
+
         case 'exit_room': {
           const { room_id, user_id } = result.data.data;
           setRooms(prev => {
@@ -183,24 +256,37 @@ export default function ChatRoom() {
           });
           break;
         }
+
+        case 'create_room': {
+          const roomResponse = result.data.data;
+          setRooms(prev => {
+            return [
+              ...prev,
+              {
+                room: roomResponse.room,
+                users: roomResponse.users,
+              },
+            ];
+          });
+          break;
+        }
+
+        case 'delete_room': {
+          const { room_id } = result.data.data;
+          setRooms(prev => {
+            return prev.filter(room => room.room.id !== room_id);
+          });
+          break;
+        }
       }
     };
 
-    _ws.addEventListener('message', handleMessage);
-
-    setWsContext(prev => {
-      return {
-        ...prev,
-        ws: _ws,
-      };
-    });
+    ws.addEventListener('message', handleMessage);
 
     return () => {
-      console.log('Closing WS');
-      _ws.removeEventListener('message', handleMessage);
-      _ws.close();
+      ws.removeEventListener('message', handleMessage);
     };
-  }, []);
+  }, [wsContext.ws]);
 
   return (
     <WSProvider value={wsContext}>
@@ -248,6 +334,12 @@ export default function ChatRoom() {
                       key={room.room.id}
                       h="6rem"
                       onClick={() => {
+                        const inRoom = room.users.find(u => u.id === user?.id);
+                        if (inRoom) {
+                          navigate(`/room/${room.room.id}`);
+                          return;
+                        }
+
                         joinRoomFetcher.submit(
                           { type: 'join_room', room_id: room.room.id, conn_id: wsContext.conn_id || '' },
                           { method: 'post' }
@@ -278,26 +370,15 @@ export default function ChatRoom() {
           </Flex>
         </Grid.Col>
         <Grid.Col span={9} p="0" className="border-l max-h-screen">
-          <Outlet />
+          <Outlet
+            context={{
+              rooms,
+            }}
+          />
         </Grid.Col>
       </Grid>
       <Modal opened={createRoomModalOpened} onClose={close} title="Create New Room">
-        <createRoomFetcher.Form method="post">
-          <input type="hidden" name="type" value={ACTION_TYPES.CREATE_ROOM} />
-          <input type="hidden" name="conn_id" value={wsContext.conn_id || ''} />
-          <TextInput
-            type="text"
-            placeholder="Room Name"
-            name="room_name"
-            error={get(createRoomFetcher, 'data.data.message.room_name', null)}
-          />
-          <Flex justify="end" mt="xl" gap="md">
-            <Button onClick={close} variant="outline">
-              Close
-            </Button>
-            <Button type="submit">Create</Button>
-          </Flex>
-        </createRoomFetcher.Form>
+        <CreateRoomModalForm close={close} />
       </Modal>
     </WSProvider>
   );

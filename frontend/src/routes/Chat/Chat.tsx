@@ -21,17 +21,20 @@ import {
   useFetcher,
   useLoaderData,
   useNavigate,
+  useOutletContext,
   useParams,
   useRouteError,
 } from 'react-router-dom';
 import { modals } from '@mantine/modals';
 import { useUser } from '@src/context/user';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { objectify } from 'radash';
+import { objectify, omit } from 'radash';
 import { formatDate } from '@src/utils';
 import { useWS, wsSchema } from '@src/context/ws';
 import clsx from 'clsx';
 import { z } from 'zod';
+import { RouteContext } from '../ChatRoom/ChatRoom';
+import { notifications } from '@mantine/notifications';
 
 export async function loader({ params }: LoaderFunctionArgs): Promise<Room> {
   const roomId = params.id;
@@ -64,11 +67,18 @@ const actionSchema = z.discriminatedUnion('type', [
   }),
   z.object({
     type: z.literal(ACTION_TYPES.SEND_MESSAGE),
+    fake_id: z.string(),
     conn_id: z.string(),
     room_id: z.string(),
     message: z.string(),
   }),
 ]);
+
+type SendMessageResponse = {
+  status: number;
+  oldId: string;
+  data: Conversation;
+};
 
 export async function action({ request, params }: LoaderFunctionArgs) {
   const room_id = params.id!;
@@ -89,15 +99,13 @@ export async function action({ request, params }: LoaderFunctionArgs) {
 
   switch (data.type) {
     case ACTION_TYPES.DELETE_ROOM: {
-      // const res = await fetch(`/api/rooms/${formDataObj.room_id}`, {
-      //   method: 'delete',
-      // });
+      const res = await fetch(`/api/rooms/${room_id}`, {
+        method: 'delete',
+      });
 
-      // if (res.status !== 200) {
-      //   throw new Response('Failed to delete room', { status: res.status });
-      // }
-
-      return;
+      return {
+        status: res.status,
+      };
     }
 
     case ACTION_TYPES.LEAVE_ROOM: {
@@ -116,7 +124,7 @@ export async function action({ request, params }: LoaderFunctionArgs) {
     case ACTION_TYPES.SEND_MESSAGE: {
       const res = await fetch(`/api/conversations`, {
         method: 'post',
-        body: JSON.stringify(data),
+        body: JSON.stringify(omit(data, ['type', 'fake_id'])),
         headers: {
           'Content-Type': 'application/json',
           'Conn-Id': data.conn_id,
@@ -125,9 +133,9 @@ export async function action({ request, params }: LoaderFunctionArgs) {
 
       return {
         status: res.status,
-        oldId: formDataObj.id,
+        oldId: data.fake_id,
         data: await res.json(),
-      };
+      } satisfies SendMessageResponse;
     }
   }
 }
@@ -150,13 +158,35 @@ export function ErrorBoundary() {
 export default function Chat() {
   const user = useUser()!;
   const id = useParams().id!;
-  const roomData = useLoaderData() as Room;
+  const rooms = useOutletContext<RouteContext>().rooms;
   const navigate = useNavigate();
+
+  const roomData = useLoaderData() as Room;
+
   const isOwner = roomData.room.owner_id === user.id;
 
-  const deleteRoomFetcher = useFetcher();
-  const leaveRoomFetcher = useFetcher<ActionData>();
+  useEffect(() => {
+    const room = rooms.find(room => room.room.id === id);
+    // room has been deleted by owner
+    if (!room) {
+      notifications.show({
+        title: 'Room deleted',
+        message: `Room ${roomData.room.name} has been deleted.`,
+        position: 'top-center',
+        color: 'orange',
+      });
+      navigate('/');
+    }
+  }, [rooms, id, navigate, roomData.room.name]);
 
+  const deleteRoomFetcher = useFetcher();
+  useEffect(() => {
+    if (deleteRoomFetcher.data && deleteRoomFetcher.data.status === 200) {
+      navigate('/');
+    }
+  }, [deleteRoomFetcher.data, navigate]);
+
+  const leaveRoomFetcher = useFetcher<ActionData>();
   useEffect(() => {
     if (leaveRoomFetcher.data && leaveRoomFetcher.data.status === 200) {
       navigate('/');
@@ -190,29 +220,45 @@ export default function Chat() {
 
   const [conversations, setConversations] = useState(roomData.conversations);
 
-  const sendMessageFetcher = useFetcher();
+  const sendMessageFetcher = useFetcher<SendMessageResponse>();
 
   const userHash = useMemo(() => {
     return objectify([...roomData.users, ...roomData.exited_users], user => user.id);
   }, [roomData]);
 
-  // const optimisticConversation = useMemo(() => {
-  //   // if(fetcher)
-  // }, []);
-
   const { ws, conn_id } = useWS();
 
   const [message, setMessage] = useState('');
+
+  const idRef = useRef(id);
+  if (idRef.current !== id) {
+    idRef.current = id;
+    setConversations(roomData.conversations);
+  }
+
   const sendMessage = () => {
+    const fakeId = uuidv4();
     setConversations(prev => {
-      return [...prev, { id: uuidv4(), user_id: user.id, room_id: id, message, created_at: new Date().toISOString() }];
+      return [...prev, { id: fakeId, user_id: user.id, room_id: id, message, created_at: new Date().toISOString() }];
     });
-    sendMessageFetcher.submit({ type: ACTION_TYPES.SEND_MESSAGE, conn_id, room_id: id, message }, { method: 'post' });
+    sendMessageFetcher.submit(
+      { type: ACTION_TYPES.SEND_MESSAGE, fake_id: fakeId, conn_id, room_id: id, message },
+      { method: 'post' }
+    );
   };
 
   useEffect(() => {
     if (sendMessageFetcher.data && sendMessageFetcher.data.status === 200) {
       setMessage('');
+      const { oldId, data } = sendMessageFetcher.data;
+      setConversations(prev => {
+        return prev.map(conversation => {
+          if (conversation.id === oldId) {
+            return data;
+          }
+          return conversation;
+        });
+      });
     }
   }, [sendMessageFetcher.data]);
 

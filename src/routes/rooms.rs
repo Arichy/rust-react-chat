@@ -38,6 +38,7 @@ pub async fn create_room(
     pool: web::Data<DbPool>,
     data: web::Json<CreateRoomData>,
     session: Session,
+    chat_server: web::Data<ChatServerHandle>,
 ) -> Result<HttpResponse, Error> {
     println!("create room with name: {}", data.room_name);
     let user_id = get_user_id(&session);
@@ -65,10 +66,30 @@ pub async fn create_room(
     let room = room_res?.map_err(ErrorInternalServerError)?;
     let user = user_res?.map_err(ErrorInternalServerError)?;
 
+    let room_id = Uuid::from_str(&room.id).unwrap();
+
     // join the room
-    services::rooms::join_room(pool, user_id, Uuid::from_str(&room.id).unwrap())
+    services::rooms::join_room(pool.clone(), user_id, room_id)
         .await
         .map_err(ErrorInternalServerError)?;
+
+    let room = web::block(move || {
+        let mut conn = pool.get()?;
+        db::rooms::get_room(&mut conn, room_id)
+    })
+    .await?
+    .map_err(ErrorInternalServerError)?;
+
+    chat_server
+        .broadcast(
+            0,
+            json!({
+                "type": "create_room",
+                "data": room,
+            })
+            .to_string(),
+        )
+        .await;
 
     Ok(HttpResponse::Ok().json(json!({
         "room": room
@@ -155,9 +176,11 @@ pub async fn exit_room(
 
 #[delete("/{room_id}")]
 pub async fn delete_room(
+    request: HttpRequest,
     pool: web::Data<DbPool>,
     session: Session,
-    room_id: web::Path<String>,
+    room_id: web::Path<Uuid>,
+    chat_server: web::Data<ChatServerHandle>,
 ) -> Result<HttpResponse, Error> {
     let room_id = room_id.to_owned();
     let user_id = get_user_id(&session);
@@ -169,7 +192,7 @@ pub async fn delete_room(
         web::block(move || {
             let mut conn = pool.get()?;
 
-            db::rooms::get_room(&mut conn, &room_id)
+            db::rooms::get_room(&mut conn, room_id)
         })
         .await?
         .map_err(ErrorInternalServerError)?
@@ -192,10 +215,21 @@ pub async fn delete_room(
     let res = web::block(move || {
         let mut conn = pool.get()?;
 
-        db::rooms::delete_room(&mut conn, &room_id)
+        db::rooms::delete_room(&mut conn, room_id)
     })
     .await?
     .map_err(ErrorInternalServerError)?;
+
+    chat_server.broadcast(
+        0,
+        json!({
+            "type": "delete_room",
+            "data": {
+                "room_id": room_id.to_string(),
+            }
+        })
+        .to_string(),
+    ).await;
 
     Ok(HttpResponse::Ok().finish())
 }
@@ -203,17 +237,16 @@ pub async fn delete_room(
 #[get("/{room_id}")]
 pub async fn get_room(
     pool: web::Data<DbPool>,
-    room_id: web::Path<String>,
+    room_id: web::Path<Uuid>,
 ) -> Result<HttpResponse, Error> {
     let room_id = room_id.to_owned();
     let room = {
         let pool = pool.clone();
-        let room_id = room_id.clone();
 
         web::block(move || {
             let mut conn = pool.get()?;
 
-            db::rooms::get_room(&mut conn, &room_id)
+            db::rooms::get_room(&mut conn, room_id)
         })
         .await?
         .map_err(ErrorInternalServerError)?

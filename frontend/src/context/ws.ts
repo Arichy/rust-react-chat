@@ -40,11 +40,40 @@ const wsCreateMessageSchema = z.object({
 const wsCreateRoomSchema = z.object({
   type: z.literal('create_room'),
   data: z.object({
-    id: z.string(),
-    name: z.string(),
-    owner_id: z.string(),
-    created_at: z.string(),
+    room: z.object({
+      id: z.string(),
+      name: z.string(),
+      last_message: z.string(),
+      created_at: z.string(),
+      owner_id: z.string(),
+    }),
+    users: z.array(
+      z.object({
+        id: z.string(),
+        username: z.string(),
+      })
+    ),
+    conversations: z.array(
+      z.object({
+        id: z.string(),
+        user_id: z.string(),
+        room_id: z.string(),
+        message: z.string(),
+        created_at: z.string(),
+      })
+    ),
+    exited_users: z.array(
+      z.object({
+        id: z.string(),
+        username: z.string(),
+      })
+    ),
   }),
+});
+
+const wsDeleteRoomSchema = z.object({
+  type: z.literal('delete_room'),
+  data: z.object({ room_id: z.string() }),
 });
 
 const wsJoinRoomSchema = z.object({
@@ -67,6 +96,7 @@ export const wsSchema = z.discriminatedUnion('type', [
   wsInitSchema,
   wsCreateMessageSchema,
   wsCreateRoomSchema,
+  wsDeleteRoomSchema,
   wsJoinRoomSchema,
   wsExitRoomSchema,
 ]);

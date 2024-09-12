@@ -93,7 +93,6 @@ const FormSignUp = ({ setShowSignIn }: { setShowSignIn: Dispatch<SetStateAction<
     const { status, sign_in } = fetcher.data;
     if (status === 200) {
       if (sign_in) {
-        console.log('redirecting');
         navigate('/');
       }
     }

@@ -12,6 +12,7 @@ import Chat, {
 } from './routes/Chat/Chat';
 import ChatIndex from './routes/ChatIndex/ChatIndex';
 import { ModalsProvider } from '@mantine/modals';
+import { Notifications } from '@mantine/notifications';
 
 const router = createBrowserRouter([
   {
@@ -57,7 +58,8 @@ export default function App() {
   return (
     <MantineProvider>
       <ModalsProvider>
-        <RouterProvider router={router} />
+        <Notifications />
+          <RouterProvider router={router} />
       </ModalsProvider>
     </MantineProvider>
   );

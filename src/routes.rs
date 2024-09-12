@@ -88,6 +88,7 @@ pub fn create_room_scope() -> Scope {
     web::scope("/rooms")
         .service(rooms::get_rooms)
         .service(rooms::create_room)
+        .service(rooms::delete_room)
         .service(rooms::join_room)
         .service(rooms::exit_room)
         .service(rooms::get_room)

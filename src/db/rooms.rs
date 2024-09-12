@@ -20,10 +20,10 @@ use super::{iso_date, DbError};
 
 pub fn get_room(
     conn: &mut SqliteConnection,
-    room_id: &str,
+    room_id: Uuid,
 ) -> Result<Option<RoomResponse>, DbError> {
     let room = rooms::table
-        .filter(rooms::id.eq(room_id))
+        .filter(rooms::id.eq(room_id.to_string()))
         .first::<Room>(conn);
 
     if room.is_err() {
@@ -119,21 +119,23 @@ pub fn create_room(
     Ok(new_room)
 }
 
-pub fn delete_room(conn: &mut SqliteConnection, room_id: &str) -> Result<(), DbError> {
+pub fn delete_room(conn: &mut SqliteConnection, room_id: Uuid) -> Result<(), DbError> {
     use crate::schema::conversations;
     use crate::schema::rooms;
     use crate::schema::rooms_users;
 
     conn.transaction(|connection| {
+        let room_id = room_id.to_string();
+
         // delete room
-        diesel::delete(rooms::table.filter(rooms::id.eq(room_id))).execute(connection)?;
+        diesel::delete(rooms::table.filter(rooms::id.eq(&room_id))).execute(connection)?;
 
         // delete conversations in the room
-        diesel::delete(conversations::table.filter(conversations::room_id.eq(room_id)))
+        diesel::delete(conversations::table.filter(conversations::room_id.eq(&room_id)))
             .execute(connection)?;
 
         // delete rooms_users in the room
-        diesel::delete(rooms_users::table.filter(rooms_users::room_id.eq(room_id)))
+        diesel::delete(rooms_users::table.filter(rooms_users::room_id.eq(&room_id)))
             .execute(connection)?;
 
         diesel::result::QueryResult::Ok(())
