@@ -1,6 +1,6 @@
 # Chat Tool
 
-Real-time chatting, built with React, Remix and [actix-web](https://actix.rs/).
+Real-time chatting, built with React, React-Router and [actix-web](https://actix.rs/).
 
 For learning purpose only.
 
@@ -30,4 +30,4 @@ For learning purpose only.
     1. Back to root folder: `cd ../`
     2. `cargo run`
 
-5. `localhost:8080`
+5. open `localhost:8080`
